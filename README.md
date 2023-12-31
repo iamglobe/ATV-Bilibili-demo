@@ -30,11 +30,6 @@
  ![](imgs/2.jpg)
  ![](imgs/3.png)
 
-
-
-### Telegram Group
- - https://t.me/appletvbilibilidemo
-
 ### 未签名iPA文件
   登录Github账号并在GitHub Action 页面 https://github.com/yichengchen/ATV-Bilibili-demo/actions/workflows/build.yml 寻找最新 run 的底部 Artifacts 下载。
 
