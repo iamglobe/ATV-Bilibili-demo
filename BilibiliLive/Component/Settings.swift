@@ -5,7 +5,9 @@
 //  Created by whw on 2022/10/19.
 //
 
+import Combine
 import Foundation
+import SwiftUI
 
 enum FeedDisplayStyle: Codable, CaseIterable {
     case large
@@ -17,6 +19,13 @@ enum FeedDisplayStyle: Codable, CaseIterable {
     }
 }
 
+class Defaults {
+    static let shared = Defaults()
+    private init() {}
+
+    @Published(key: "Settings.danmuStatus") var showDanmu = true
+}
+
 enum Settings {
     @UserDefaultCodable("Settings.displayStyle", defaultValue: .normal)
     static var displayStyle: FeedDisplayStyle
@@ -26,6 +35,9 @@ enum Settings {
 
     @UserDefaultCodable("Settings.mediaQuality", defaultValue: .quality_1080p)
     static var mediaQuality: MediaQualityEnum
+
+    @UserDefaultCodable("Settings.mediaPlayerSpeed", defaultValue: PlaySpeed.default)
+    static var mediaPlayerSpeed: PlaySpeed
 
     @UserDefaultCodable("Settings.danmuArea", defaultValue: .style_75)
     static var danmuArea: DanmuArea
@@ -44,9 +56,6 @@ enum Settings {
 
     @UserDefault("Settings.preferAvc", defaultValue: false)
     static var preferAvc: Bool
-
-    @UserDefault("Settings.defaultDanmuStatus", defaultValue: true)
-    static var defaultDanmuStatus: Bool
 
     @UserDefault("Settings.danmuMask", defaultValue: true)
     static var danmuMask: Bool
@@ -92,11 +101,49 @@ enum Settings {
 
     @UserDefault("Settings.arealimit.customServer", defaultValue: "")
     static var areaLimitCustomServer: String
+
+    @UserDefault("Settings.ui.sideMenuAutoSelectChange", defaultValue: false)
+    static var sideMenuAutoSelectChange: Bool
+
+    @UserDefaultCodable("Settings.SponsorBlockType", defaultValue: SponsorBlockType.none)
+    static var enableSponsorBlock: SponsorBlockType
+
+    @UserDefault("Settings.danmuFilter", defaultValue: false)
+    static var enableDanmuFilter: Bool
+
+    @UserDefault("Settings.danmuRemoveDup", defaultValue: false)
+    static var enableDanmuRemoveDup: Bool
+
+    @UserDefaultCodable("Settings.danmuAlpha", defaultValue: .alpha_10)
+    static var danmuAlpha: DanmuAlpha
+
+    @UserDefaultCodable("Settings.danmuStrokeWidth", defaultValue: .width_20)
+    static var danmuStrokeWidth: DanmuStrokeWidth
+
+    @UserDefaultCodable("Settings.danmuStrokeAlpha", defaultValue: .alpha_08)
+    static var danmuStrokeAlpha: DanmuStrokeAlpha
 }
 
 struct MediaQuality {
     var qn: Int
     var fnval: Int
+}
+
+enum SponsorBlockType: String, Codable, CaseIterable {
+    case none
+    case jump
+    case tip
+
+    var title: String {
+        switch self {
+        case .none:
+            return "关"
+        case .jump:
+            return "自动跳过"
+        case .tip:
+            return "手动跳过"
+        }
+    }
 }
 
 enum DanmuArea: Codable, CaseIterable {
@@ -133,6 +180,51 @@ enum DanmuSize: String, Codable, CaseIterable {
         case .size_57:
             return 57
         }
+    }
+}
+
+enum DanmuAlpha: Double, Codable, CaseIterable {
+    case alpha_03 = 0.3
+    case alpha_04 = 0.4
+    case alpha_05 = 0.5
+    case alpha_06 = 0.6
+    case alpha_07 = 0.7
+    case alpha_08 = 0.8
+    case alpha_09 = 0.9
+    case alpha_10 = 1.0
+
+    var title: String {
+        return String(format: "%.1f", rawValue)
+    }
+}
+
+enum DanmuStrokeWidth: Double, Codable, CaseIterable {
+    case width_0 = 0.0
+    case width_05 = 0.5
+    case width_10 = 1.0
+    case width_15 = 1.5
+    case width_20 = 2.0
+
+    var title: String {
+        return String(format: "%.1f", rawValue)
+    }
+}
+
+enum DanmuStrokeAlpha: Double, Codable, CaseIterable {
+    case alpha_00 = 0.0
+    case alpha_01 = 0.1
+    case alpha_02 = 0.2
+    case alpha_03 = 0.3
+    case alpha_04 = 0.4
+    case alpha_05 = 0.5
+    case alpha_06 = 0.6
+    case alpha_07 = 0.7
+    case alpha_08 = 0.8
+    case alpha_09 = 0.9
+    case alpha_10 = 1.0
+
+    var title: String {
+        return String(format: "%.1f", rawValue)
     }
 }
 

@@ -1,5 +1,5 @@
 //
-//  LoginViewController.swift
+//  CookieManager.swift
 //  BilibiliLive
 //
 //  Created by Etan Chen on 2021/3/28.
@@ -51,5 +51,10 @@ class CookieHandler {
     func csrf() -> String? {
         let cookies = getCookie(forURL: "https://bilibili.com")
         return cookies.first(where: { $0.name == "bili_jct" })?.value
+    }
+
+    func buvid3() -> String {
+        let cookies = getCookie(forURL: "https://bilibili.com")
+        return cookies.first(where: { $0.name == "buvid3" })?.value ?? ""
     }
 }

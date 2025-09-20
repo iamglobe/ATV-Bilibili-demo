@@ -6,6 +6,7 @@
 //
 
 import AVKit
+import Combine
 import Foundation
 import UIKit
 
@@ -43,6 +44,7 @@ class VideoDetailViewController: UIViewController {
     @IBOutlet var pageCollectionView: UICollectionView!
     @IBOutlet var recommandCollectionView: UICollectionView!
     @IBOutlet var replysCollectionView: UICollectionView!
+    @IBOutlet var repliesCollectionViewHeightConstraints: NSLayoutConstraint!
     @IBOutlet var ugcCollectionView: UICollectionView!
 
     @IBOutlet var pageView: UIView!
@@ -70,6 +72,8 @@ class VideoDetailViewController: UIViewController {
     private var subTitles: [SubtitleData]?
 
     private var allUgcEpisodes = [VideoDetail.Info.UgcSeason.UgcVideoInfo]()
+
+    private var subscriptions = [AnyCancellable]()
 
     static func create(aid: Int, cid: Int?, epid: Int? = nil) -> VideoDetailViewController {
         let vc = UIStoryboard(name: "Main", bundle: .main).instantiateViewController(identifier: String(describing: self)) as! VideoDetailViewController
@@ -126,6 +130,11 @@ class VideoDetailViewController: UIViewController {
             focusGuide.bottomAnchor.constraint(equalTo: actionButtonSpaceView.bottomAnchor),
         ])
         focusGuide.preferredFocusEnvironments = [dislikeButton]
+
+        replysCollectionView.publisher(for: \.contentSize).sink { [weak self] newSize in
+            self?.repliesCollectionViewHeightConstraints.constant = newSize.height
+            self?.view.setNeedsLayout()
+        }.store(in: &subscriptions)
     }
 
     override var preferredFocusedView: UIView? {
@@ -295,7 +304,7 @@ class VideoDetailViewController: UIViewController {
 
         var notes = [String]()
         let status = data.View.dynamic ?? ""
-        if status.count > 1 {
+        if status.count > 1, status != data.View.desc {
             notes.append(status)
         }
         notes.append(data.View.desc ?? "")
@@ -320,8 +329,16 @@ class VideoDetailViewController: UIViewController {
         }
 
         if let season = data.View.ugc_season {
-            allUgcEpisodes = Array((season.sections.map { $0.episodes }.joined()))
+            if season.sections.count > 1 {
+                if let section = season.sections.first(where: { section in section.episodes.contains(where: { episode in episode.aid == data.View.aid }) }) {
+                    allUgcEpisodes = section.episodes
+                }
+            } else {
+                allUgcEpisodes = season.sections.first?.episodes ?? []
+            }
+            allUgcEpisodes.sort { $0.arc.ctime < $1.arc.ctime }
         }
+
         ugcCollectionView.reloadData()
         ugcLabel.text = "合集 \(data.View.ugc_season?.title ?? "")  \(data.View.ugc_season?.sections.first?.title ?? "")"
         ugcView.isHidden = allUgcEpisodes.count == 0
@@ -412,6 +429,12 @@ class VideoDetailViewController: UIViewController {
             guard let favList = try? await WebRequest.requestFavVideosList() else {
                 return
             }
+            if favButton.isOn {
+                favButton.title? -= 1
+                favButton.isOn = false
+                WebRequest.removeFavorite(aid: aid, mid: favList.map { $0.id })
+                return
+            }
             let alert = UIAlertController(title: "收藏", message: nil, preferredStyle: .actionSheet)
             let aid = aid
             for fav in favList {
@@ -448,7 +471,7 @@ extension VideoDetailViewController: UICollectionViewDelegate {
             present(player, animated: true, completion: nil)
         case replysCollectionView:
             guard let reply = replys?.replies?[indexPath.item] else { return }
-            let detail = ContentDetailViewController.createReply(content: reply.content.message)
+            let detail = ReplyDetailViewController(reply: reply)
             present(detail, animated: true)
         case ugcCollectionView:
             let video = allUgcEpisodes[indexPath.item]
@@ -568,18 +591,6 @@ extension VideoDetailViewController {
     }
 }
 
-class ReplyCell: UICollectionViewCell {
-    @IBOutlet var avatarImageView: UIImageView!
-    @IBOutlet var userNameLabel: UILabel!
-    @IBOutlet var contenLabel: UILabel!
-
-    func config(replay: Replys.Reply) {
-        avatarImageView.kf.setImage(with: URL(string: replay.member.avatar), options: [.processor(DownsamplingImageProcessor(size: CGSize(width: 80, height: 80))), .processor(RoundCornerImageProcessor(radius: .widthFraction(0.5))), .cacheSerializer(FormatIndicatedCacheSerializer.png)])
-        userNameLabel.text = replay.member.uname
-        contenLabel.text = replay.content.message
-    }
-}
-
 class RelatedVideoCell: BLMotionCollectionViewCell {
     let titleLabel = MarqueeLabel()
     let imageView = UIImageView()
@@ -600,6 +611,7 @@ class RelatedVideoCell: BLMotionCollectionViewCell {
         }
         titleLabel.setContentHuggingPriority(.required, for: .vertical)
         titleLabel.font = UIFont.systemFont(ofSize: 28)
+        titleLabel.fadeLength = 60
         stopScroll()
     }
 

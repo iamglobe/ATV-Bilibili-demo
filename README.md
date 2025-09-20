@@ -31,7 +31,8 @@
  ![](imgs/3.png)
 
 ### 未签名iPA文件
-  登录Github账号并在GitHub Action 页面 https://github.com/yichengchen/ATV-Bilibili-demo/actions/workflows/build.yml 寻找最新 run 的底部 Artifacts 下载。
+
+从 https://github.com/yichengchen/ATV-Bilibili-demo/releases/tag/nightly 获取基于最新代码构建的
 
 ### Links
 

@@ -75,6 +75,7 @@ class FeedCollectionViewCell: BLMotionCollectionViewCell {
         titleLabel.holdScrolling = true
         titleLabel.setContentHuggingPriority(.required, for: .vertical)
         titleLabel.setContentCompressionResistancePriority(.required, for: .vertical)
+        titleLabel.fadeLength = 60
         upLabel.setContentHuggingPriority(.required, for: .vertical)
         upLabel.setContentCompressionResistancePriority(.required, for: .vertical)
         upLabel.textColor = UIColor(named: "titleColor")
@@ -141,9 +142,9 @@ class FeedCollectionViewCell: BLMotionCollectionViewCell {
 extension FeedDisplayStyle {
     var fractionalWidth: CGFloat {
         switch self {
-        case .large:
+        case .large, .sideBar:
             return 0.33
-        case .normal, .sideBar:
+        case .normal:
             return 0.25
         }
     }

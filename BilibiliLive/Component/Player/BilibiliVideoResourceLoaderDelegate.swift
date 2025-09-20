@@ -1,5 +1,5 @@
 //
-//  CustomPlaylistDelegate.swift
+//  BilibiliVideoResourceLoaderDelegate.swift
 //  MPEGDASHAVPlayerDemo
 //
 //  Created by yicheng on 2022/08/20.
@@ -99,7 +99,7 @@ class BilibiliVideoResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelega
             supplementCodesc = codecs + "/db1p"
             codecs = "hvc1.2.4.L150"
             videoRange = "PQ"
-        } else if codecs == "dvh1.05.06" {
+        } else if codecs.hasPrefix("dvh1.05") {
             videoRange = "PQ"
         } else if isHDR {
             Logger.warn("unknown hdr codecs: \(codecs)")
@@ -286,7 +286,9 @@ class BilibiliVideoResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelega
             httpPort = (try? httpServer.port()) ?? 0
         }
         for subtitle in subtitles {
-            addSubtitleData(lang: subtitle.lan, name: subtitle.lan_doc, duration: info.dash.duration, url: subtitle.url.absoluteString)
+            if let url = subtitle.url {
+                addSubtitleData(lang: subtitle.lan, name: subtitle.lan_doc, duration: info.dash.duration, url: url.absoluteString)
+            }
         }
 
         // i-frame
@@ -301,7 +303,7 @@ class BilibiliVideoResourceLoaderDelegate: NSObject, AVAssetResourceLoaderDelega
 
         masterPlaylist.append("\n#EXT-X-ENDLIST\n")
 
-        Logger.debug("masterPlaylist:", masterPlaylist)
+        Logger.debug("masterPlaylist: \(masterPlaylist)")
     }
 
     private func reportError(_ loadingRequest: AVAssetResourceLoadingRequest, withErrorCode error: Int) {
@@ -380,7 +382,7 @@ private extension BilibiliVideoResourceLoaderDelegate {
             }
             return
         }
-        Logger.debug("handle loading", customUrl)
+        Logger.debug("handle loading \(customUrl)")
     }
 
     func bindHttpServer() {

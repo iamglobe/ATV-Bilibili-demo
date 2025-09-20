@@ -31,18 +31,21 @@ enum WebRequest {
         static let info = "https://api.bilibili.com/x/web-interface/view"
         static let fav = "https://api.bilibili.com/x/v3/fav/resource/list"
         static let favList = "https://api.bilibili.com/x/v3/fav/folder/created/list-all"
+        static let favFolderCollectedList = "https://api.bilibili.com/x/v3/fav/folder/collected/list"
+        static let favSeason = "https://api.bilibili.com/x/space/fav/season/list"
         static let reportHistory = "https://api.bilibili.com/x/v2/history/report"
         static let upSpace = "https://api.bilibili.com/x/space/wbi/arc/search"
         static let like = "https://api.bilibili.com/x/web-interface/archive/like"
         static let likeStatus = "https://api.bilibili.com/x/web-interface/archive/has/like"
         static let coin = "https://api.bilibili.com/x/web-interface/coin/add"
-        static let playerInfo = "https://api.bilibili.com/x/player/v2"
-        static let playUrl = "https://api.bilibili.com/x/player/playurl"
+        static let playerInfo = "https://api.bilibili.com/x/player/wbi/v2"
+        static let playUrl = "https://api.bilibili.com/x/player/wbi/playurl"
         static let pcgPlayUrl = "https://api.bilibili.com/pgc/player/web/playurl"
         static let bangumiSeason = "https://bangumi.bilibili.com/view/web_api/season"
         static let userEpisodeInfo = "https://api.bilibili.com/pgc/season/episode/web/info"
         static let danmuWebView = "https://api.bilibili.com/x/v2/dm/web/view"
         static let danmuList = "https://api.bilibili.com/x/v2/dm/list/seg.so"
+//        static let spi = "https://api.bilibili.com/x/frontend/finger/spi"
     }
 
     static func requestData(method: HTTPMethod = .get,
@@ -66,11 +69,11 @@ enum WebRequest {
         }
 
         if !afheaders.contains(where: { $0.name == "User-Agent" }) {
-            afheaders.add(.userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.2 Safari/605.1.15"))
+            afheaders.add(.userAgent(Keys.userAgent))
         }
 
         if !afheaders.contains(where: { $0.name == "Referer" }) {
-            afheaders.add(HTTPHeader(name: "Referer", value: "https://www.bilibili.com"))
+            afheaders.add(HTTPHeader(name: "Referer", value: Keys.referer))
         }
 
         var session = Session.default
@@ -80,21 +83,33 @@ enum WebRequest {
         }
         session.sessionConfiguration.timeoutIntervalForResource = 10
         session.sessionConfiguration.timeoutIntervalForRequest = 10
-        session.request(url,
-                        method: method,
-                        parameters: parameters,
-                        encoding: URLEncoding.default,
-                        headers: afheaders,
-                        interceptor: nil)
-            .responseData { response in
-                switch response.result {
-                case let .success(data):
-                    complete?(.success(data))
-                case let .failure(err):
-                    print(err)
-                    complete?(.failure(.networkFail))
-                }
+
+        let completionHandler: (AFDataResponse<Data>) -> Void = { response in
+            switch response.result {
+            case let .success(data):
+                complete?(.success(data))
+            case let .failure(err):
+                print(err)
+                complete?(.failure(.networkFail))
             }
+        }
+
+        addWbiSign(method: method, url: url, parameters: parameters) { wbiSign in
+            if let wbiSign {
+                session.request(wbiSign,
+                                method: method,
+                                encoding: URLEncoding.default,
+                                headers: afheaders)
+                    .responseData(completionHandler: completionHandler)
+            } else {
+                session.request(url,
+                                method: method,
+                                parameters: parameters,
+                                encoding: URLEncoding.default,
+                                headers: afheaders)
+                    .responseData(completionHandler: completionHandler)
+            }
+        }
     }
 
     static func requestJSON(method: HTTPMethod = .get,
@@ -142,13 +157,21 @@ enum WebRequest {
                     let object = try (decoder ?? JSONDecoder()).decode(T.self, from: data)
                     complete?(.success(object))
                 } catch let err {
-                    print("decode fail:", err)
+                    Logger.warn("decode fail: \(err)")
                     complete?(.failure(.decodeFail(message: err.localizedDescription + String(describing: err))))
                 }
             case let .failure(err):
+                Logger.warn("request fail: \(err)")
                 complete?(.failure(err))
             }
         }
+    }
+
+    static func requestIndex() {
+        requestData(url: "https://www.bilibili.com", complete: {
+            _ in
+            CookieHandler.shared.backupCookies()
+        })
     }
 
     static func requestPB<T: SwiftProtobuf.Message>(method: HTTPMethod = .get,
@@ -162,7 +185,7 @@ enum WebRequest {
             switch response {
             case let .success(data):
                 do {
-                    let protobufObject = try T(serializedData: data)
+                    let protobufObject = try T(serializedBytes: data)
                     complete?(.success(protobufObject))
                 } catch let err {
                     Logger.warn("Protobuf parsing error: \(err.localizedDescription)")
@@ -287,7 +310,10 @@ extension WebRequest {
             let list: [FavListData]
         }
         let res: Resp = try await request(method: .get, url: EndPoint.favList, parameters: ["up_mid": mid])
-        return res.list
+        return res.list.map {
+            $0.createBySelf = true
+            return $0
+        }
     }
 
     static func requestFavVideos(mid: String, page: Int) async throws -> [FavData] {
@@ -295,6 +321,23 @@ extension WebRequest {
             let medias: [FavData]?
         }
         let res: Resp = try await request(method: .get, url: EndPoint.fav, parameters: ["media_id": mid, "ps": "20", "pn": page, "platform": "web"])
+        return res.medias ?? []
+    }
+
+    static func requestFavFolderCollectedList() async throws -> [FavListData] {
+        guard let mid = ApiRequest.getToken()?.mid else { return [] }
+        struct Resp: Codable {
+            let list: [FavListData]
+        }
+        let res: Resp = try await request(method: .get, url: EndPoint.favFolderCollectedList, parameters: ["up_mid": mid, "pn": 1, "ps": 100, "platform": "web"])
+        return res.list
+    }
+
+    static func requestFavSeason(seasonId: String, page: Int) async throws -> [FavData] {
+        struct Resp: Codable {
+            let medias: [FavData]?
+        }
+        let res: Resp = try await request(method: .get, url: EndPoint.favSeason, parameters: ["season_id": seasonId, "ps": "20", "pn": page, "platform": "web"])
         return res.medias ?? []
     }
 
@@ -362,6 +405,10 @@ extension WebRequest {
 
     static func requestFavorite(aid: Int, mid: Int) {
         requestJSON(method: .post, url: "https://api.bilibili.com/x/v3/fav/resource/deal", parameters: ["rid": aid, "type": 2, "add_media_ids": mid])
+    }
+
+    static func removeFavorite(aid: Int, mid: [Int]) {
+        requestJSON(method: .post, url: "https://api.bilibili.com/x/v3/fav/resource/deal", parameters: ["rid": aid, "type": 2, "del_media_ids": mid.map { "\($0)" }.joined(separator: ",")])
     }
 
     static func requestFavoriteStatus(aid: Int, complete: ((Bool) -> Void)?) {
@@ -480,7 +527,13 @@ struct HistoryData: DisplayData, Codable {
 
     let title: String
     var ownerName: String { owner.name }
-    var avatar: URL? { URL(string: owner.face) }
+    var avatar: URL? {
+        if owner.face != nil {
+            return URL(string: owner.face!)
+        }
+        return nil
+    }
+
     let pic: URL?
 
     let owner: VideoOwner
@@ -491,7 +544,7 @@ struct HistoryData: DisplayData, Codable {
 //    let bangumi: BangumiData?
 }
 
-struct FavData: DisplayData, Codable {
+struct FavData: PlayableData, Codable {
     var cover: String
     var upper: VideoOwner
     var id: Int
@@ -504,16 +557,27 @@ struct FavData: DisplayData, Codable {
     struct Ogv: Codable, Hashable {
         let season_id: Int?
     }
+
+    var aid: Int {
+        return id
+    }
+
+    var cid: Int {
+        return 0
+    }
 }
 
 class FavListData: Codable, Hashable {
     let title: String
     let id: Int
+    var mid: Int?
     var currentPage = 1
     var end = false
     var loading = false
+    // 收藏夹是否为用户自己创建
+    var createBySelf = false
     enum CodingKeys: String, CodingKey {
-        case title, id
+        case title, id, mid
     }
 
     static func == (lhs: FavListData, rhs: FavListData) -> Bool {
@@ -548,6 +612,7 @@ struct VideoDetail: Codable, Hashable {
         let ugc_season: UgcSeason?
         let redirect_url: URL?
         let stat: Stat
+        var ctime: Int?
         struct Stat: Codable, Hashable {
             let favorite: Int
             let coin: Int
@@ -576,6 +641,7 @@ struct VideoDetail: Codable, Hashable {
             struct UgcVideoInfo: Codable, Hashable, DisplayData {
                 var ownerName: String { "" }
                 var pic: URL? { arc.pic }
+                let id: Int
                 let aid: Int
                 let cid: Int
                 let arc: Arc
@@ -583,6 +649,7 @@ struct VideoDetail: Codable, Hashable {
 
                 struct Arc: Codable, Hashable {
                     let pic: URL
+                    let ctime: Int
                 }
             }
         }
@@ -609,13 +676,25 @@ extension VideoDetail: DisplayData {
     var title: String { View.title }
     var ownerName: String { View.owner.name }
     var pic: URL? { View.pic }
-    var avatar: URL? { URL(string: View.owner.face) }
+    var avatar: URL? {
+        if View.owner.face != nil {
+            return URL(string: View.owner.face!)
+        }
+        return nil
+    }
+
     var date: String? { DateFormatter.stringFor(timestamp: View.pubdate) }
 }
 
 extension VideoDetail.Info: DisplayData, PlayableData {
     var ownerName: String { owner.name }
-    var avatar: URL? { URL(string: owner.face) }
+    var avatar: URL? {
+        if owner.face != nil {
+            return URL(string: owner.face!)
+        }
+        return nil
+    }
+
     var date: String? { DateFormatter.stringFor(timestamp: pubdate) }
 }
 
@@ -625,10 +704,16 @@ struct SubtitleResp: Codable {
 
 struct SubtitleData: Codable, Hashable {
     let lan_doc: String
-    let subtitle_url: URL
+    let subtitle_url: String?
     let lan: String
 
-    var url: URL { subtitle_url.addSchemeIfNeed() }
+    var url: URL? {
+        if let subtitle_url, let sub_url = URL(string: subtitle_url) {
+            return sub_url.addSchemeIfNeed()
+        }
+        return nil
+    }
+
     var subtitleContents: [SubtitleContent]?
 }
 
@@ -639,12 +724,29 @@ struct Replys: Codable, Hashable {
             let avatar: String
         }
 
+        struct Emote: Codable, Hashable {
+            let text: String
+            let url: String
+        }
+
+        struct JumpUrl: Codable, Hashable {
+            let title: String
+        }
+
         struct Content: Codable, Hashable {
             let message: String
+            let pictures: [Picture]?
+            let emote: [String: Emote]?
+            let jump_url: [String: JumpUrl]?
+
+            struct Picture: Codable, Hashable {
+                let img_src: String
+            }
         }
 
         let member: Member
         let content: Content
+        let replies: [Reply]?
     }
 
     let replies: [Reply]?
@@ -740,7 +842,7 @@ struct UserEpisodeInfo: Codable, Hashable {
 struct VideoOwner: Codable, Hashable {
     let mid: Int
     let name: String
-    let face: String
+    var face: String?
 }
 
 struct VideoPage: Codable, Hashable {
@@ -775,16 +877,23 @@ struct PlayerInfo: Codable {
     let view_points: [ViewPoint]?
     let dm_mask: MaskInfo?
     let last_play_cid: Int
+    let is_upower_exclusive: Bool?
     var playTimeInSecond: Int {
         last_play_time / 1000
     }
 
-    struct ViewPoint: Codable {
+    class ViewPoint: Codable {
         let type: Int
         let from: TimeInterval
         let to: TimeInterval
         let content: String
         let imgUrl: URL?
+
+        var imageData: Data?
+
+        enum CodingKeys: String, CodingKey {
+            case type, from, to, content, imgUrl
+        }
     }
 
     struct MaskInfo: Codable {
@@ -839,7 +948,7 @@ struct VideoPlayURLInfo: Codable {
         let format: String
         let new_description: String
         let display_desc: String
-        let codecs: [String]
+        let codecs: [String]?
     }
 
     struct DashInfo: Codable {

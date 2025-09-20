@@ -88,11 +88,17 @@ class FeedCollectionViewController: UIViewController {
     }
 
     func appendData(displayData: [any DisplayData]) {
-        _displayData.append(contentsOf: displayData.map { AnyDispplayData(data: $0) }.filter({ !_displayData.contains($0) }))
-        if displayData.count < pageSize - 5 {
-            finished = true
-        }
         isLoading = false
+        _displayData.append(contentsOf: displayData.map { AnyDispplayData(data: $0) }.filter({ !_displayData.contains($0) }))
+        if displayData.count < pageSize - 5 || displayData.count == 0 {
+            finished = true
+            return
+        }
+
+        if _displayData.count < 12 {
+            isLoading = true
+            loadMore?()
+        }
     }
 
     override func viewDidLoad() {
@@ -115,25 +121,21 @@ class FeedCollectionViewController: UIViewController {
         }
     }
 
-    private var selfSizeingEnable: Bool {
-        true
-    }
-
     private func makeGridLayoutSection() -> NSCollectionLayoutSection {
         let style = styleOverride ?? Settings.displayStyle
         let heightDimension = NSCollectionLayoutDimension.estimated(style.heightEstimated)
         let item = NSCollectionLayoutItem(layoutSize: NSCollectionLayoutSize(
             widthDimension: .fractionalWidth(style.fractionalWidth),
-            heightDimension: selfSizeingEnable ? heightDimension : .fractionalHeight(1)
+            heightDimension: heightDimension
         ))
         let hSpacing: CGFloat = style == .large ? 35 : 30
         item.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: hSpacing, bottom: 0, trailing: hSpacing)
         let group = NSCollectionLayoutGroup.horizontal(
             layoutSize: NSCollectionLayoutSize(
                 widthDimension: .fractionalWidth(1),
-                heightDimension: selfSizeingEnable ? heightDimension : .fractionalWidth(style.fractionalHeight)
+                heightDimension: heightDimension
             ),
-            subitem: item,
+            repeatingSubitem: item,
             count: style.feedColCount
         )
         let vSpacing: CGFloat = style == .large ? 24 : 16
